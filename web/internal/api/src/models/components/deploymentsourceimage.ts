@@ -5,11 +5,11 @@
 import * as z from "zod/v3";
 
 /**
- * Deploy a prebuilt Docker image as-is.
+ * Deploy a prebuilt Docker image without a build.
  */
 export type DeploymentSourceImage = {
   /**
-   * Docker image to deploy as-is. Accepts a tag or a digest.
+   * Full image reference to deploy as-is. Qualify the version with a tag (ghcr.io/acme/api:v1.2.3) or with a digest (ghcr.io/acme/api@sha256:...). Without either, the registry serves the latest tag.
    */
   dockerImage: string;
 };

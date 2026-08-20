@@ -9,7 +9,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type DeploymentDocker = {
   /**
-   * The Docker image this deployment runs.
+   * The Docker image reference requested for this deployment.
    */
   image: string;
 };

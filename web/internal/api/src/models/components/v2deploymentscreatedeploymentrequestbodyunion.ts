@@ -46,7 +46,7 @@ export type V2DeploymentsCreateDeploymentRequestBody3 = {
    */
   git?: DeploymentSourceGit | undefined;
   /**
-   * Deploy a prebuilt Docker image as-is.
+   * Deploy a prebuilt Docker image without a build.
    */
   image?: DeploymentSourceImage | undefined;
   /**
@@ -82,7 +82,7 @@ export type V2DeploymentsCreateDeploymentRequestBody2 = {
    */
   git: DeploymentSourceGit;
   /**
-   * Deploy a prebuilt Docker image as-is.
+   * Deploy a prebuilt Docker image without a build.
    */
   image?: DeploymentSourceImage | undefined;
   /**
@@ -118,7 +118,7 @@ export type V2DeploymentsCreateDeploymentRequestBody1 = {
    */
   git?: DeploymentSourceGit | undefined;
   /**
-   * Deploy a prebuilt Docker image as-is.
+   * Deploy a prebuilt Docker image without a build.
    */
   image: DeploymentSourceImage;
   /**
