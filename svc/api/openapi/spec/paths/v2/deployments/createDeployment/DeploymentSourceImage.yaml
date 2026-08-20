@@ -13,4 +13,4 @@ properties:
       (ghcr.io/acme/api@sha256:...). Without either, the registry serves the
       latest tag.
     example: "ghcr.io/acme/api:v1.2.3"
-description: Deploy a prebuilt Docker image as-is.
+description: Deploy a prebuilt Docker image without a build.

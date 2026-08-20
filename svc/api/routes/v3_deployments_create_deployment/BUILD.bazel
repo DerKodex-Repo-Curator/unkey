@@ -1,0 +1,32 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "v3_deployments_create_deployment",
+    srcs = ["handler.go"],
+    importpath = "github.com/unkeyed/unkey/svc/api/routes/v3_deployments_create_deployment",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//gen/rpc/ctrl",
+        "//pkg/db",
+        "//pkg/zen",
+        "//svc/api/openapi",
+        "//svc/api/routes/v2_deployments_create_deployment",
+    ],
+)
+
+go_test(
+    name = "v3_deployments_create_deployment_test",
+    srcs = [
+        "200_test.go",
+        "400_test.go",
+    ],
+    deps = [
+        ":v3_deployments_create_deployment",
+        "//gen/proto/ctrl/v1:ctrl",
+        "//pkg/db",
+        "//pkg/uid",
+        "//svc/api/internal/testutil",
+        "//svc/api/openapi",
+        "@com_github_stretchr_testify//require",
+    ],
+)

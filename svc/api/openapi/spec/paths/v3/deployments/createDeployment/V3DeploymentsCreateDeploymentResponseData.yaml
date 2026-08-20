@@ -1,0 +1,6 @@
+type: object
+required:
+  - deploymentId
+properties:
+  deploymentId:
+    type: string

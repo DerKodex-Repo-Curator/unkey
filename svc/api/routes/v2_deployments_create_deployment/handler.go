@@ -30,6 +30,15 @@ type (
 	Response = openapi.V2DeploymentsCreateDeploymentResponseBody
 )
 
+type CreateDeploymentRequest struct {
+	Project     openapi.ResourceIdentifier
+	App         openapi.ResourceIdentifier
+	Environment openapi.ResourceIdentifier
+	Git         *openapi.DeploymentSourceGit
+	OCIImage    string
+	Deployment  *openapi.DeploymentSourceDeployment
+}
+
 type Handler struct {
 	DB         db.Database
 	CtrlClient ctrl.DeployServiceClient
@@ -44,14 +53,53 @@ func (h *Handler) Method() string {
 }
 
 func (h *Handler) Handle(ctx context.Context, s *zen.Session) error {
-	principal, err := s.GetPrincipal()
+	req, err := zen.BindBody[Request](s)
 	if err != nil {
 		return err
 	}
 
-	req, err := zen.BindBody[Request](s)
+	createReq := CreateDeploymentRequest{
+		Project:     req.Project,
+		App:         req.App,
+		Environment: req.Environment,
+		Git:         req.Git,
+		OCIImage:    "",
+		Deployment:  req.Deployment,
+	}
+	if req.Image != nil {
+		if err := imageref.Validate(req.Image.DockerImage); err != nil {
+			return err
+		}
+		createReq.OCIImage, err = imageref.NormalizeHistorical(req.Image.DockerImage)
+		if err != nil {
+			return fault.Wrap(
+				err,
+				fault.Code(codes.App.Validation.InvalidInput.URN()),
+				fault.Internal("failed to normalize validated image reference"),
+				fault.Public("The docker image reference is not valid."),
+			)
+		}
+	}
+
+	deploymentID, err := h.Create(ctx, s, createReq)
 	if err != nil {
 		return err
+	}
+
+	return s.JSON(http.StatusCreated, Response{
+		Meta: openapi.Meta{
+			RequestId: s.RequestID(),
+		},
+		Data: openapi.V2DeploymentsCreateDeploymentResponseData{
+			DeploymentId: deploymentID,
+		},
+	})
+}
+
+func (h *Handler) Create(ctx context.Context, s *zen.Session, req CreateDeploymentRequest) (string, error) {
+	principal, err := s.GetPrincipal()
+	if err != nil {
+		return "", err
 	}
 
 	environment, err := db.Query.FindEnvironmentByIdentifiers(ctx, h.DB.RO(), db.FindEnvironmentByIdentifiersParams{
@@ -62,14 +110,14 @@ func (h *Handler) Handle(ctx context.Context, s *zen.Session) error {
 	})
 	if err != nil {
 		if db.IsNotFound(err) {
-			return fault.New(
+			return "", fault.New(
 				"environment not found",
 				fault.Code(codes.Data.Environment.NotFound.URN()),
 				fault.Internal("project, app, or environment did not resolve"),
 				fault.Public("The requested project, app, or environment does not exist."),
 			)
 		}
-		return fault.Wrap(err, fault.Internal("failed to resolve environment"))
+		return "", fault.Wrap(err, fault.Internal("failed to resolve environment"))
 	}
 
 	err = principal.Authorize(rbac.Or(
@@ -89,7 +137,7 @@ func (h *Handler) Handle(ctx context.Context, s *zen.Session) error {
 		),
 	))
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// Clients announce themselves via X-Unkey-Client: the CLI as
@@ -106,7 +154,7 @@ func (h *Handler) Handle(ctx context.Context, s *zen.Session) error {
 
 	actorInfo, err := ctrlclient.Actor(s)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// nolint: exhaustruct // optional proto fields are set per source below
@@ -120,16 +168,13 @@ func (h *Handler) Handle(ctx context.Context, s *zen.Session) error {
 	}
 
 	switch {
-	case req.Image != nil:
-		if err := imageref.Validate(req.Image.DockerImage); err != nil {
-			return err
-		}
-		ctrlReq.DockerImage = req.Image.DockerImage
+	case req.OCIImage != "":
+		ctrlReq.DockerImage = req.OCIImage
 
 	case req.Git != nil:
 		git := req.Git
 		if hasValue(git.Repository) && !hasValue(git.CommitSha) {
-			return fault.New(
+			return "", fault.New(
 				"repository requires commitSha",
 				fault.Code(codes.App.Validation.InvalidInput.URN()),
 				fault.Internal("repository set without commitSha"),
@@ -141,14 +186,14 @@ func (h *Handler) Handle(ctx context.Context, s *zen.Session) error {
 		// precondition, not an internal failure.
 		if _, err = db.Query.FindGithubRepoConnectionByAppId(ctx, h.DB.RO(), environment.AppID); err != nil {
 			if db.IsNotFound(err) {
-				return fault.New(
+				return "", fault.New(
 					"no repo connection",
 					fault.Code(codes.App.Precondition.PreconditionFailed.URN()),
 					fault.Internal("app has no github repo connection for git source"),
-					fault.Public("This app has no connected GitHub repository. Deploy a prebuilt image with the image source, or connect a repository first."),
+					fault.Public("This app has no connected GitHub repository. Deploy a prebuilt image with the Docker source, or connect a repository first."),
 				)
 			}
-			return fault.Wrap(err, fault.Internal("failed to check repo connection"))
+			return "", fault.Wrap(err, fault.Internal("failed to check repo connection"))
 		}
 		// nolint: exhaustruct // ctrl fills the commit metadata it resolves from git
 		ctrlReq.GitCommit = &ctrlv1.GitCommitInfo{
@@ -160,17 +205,17 @@ func (h *Handler) Handle(ctx context.Context, s *zen.Session) error {
 	case req.Deployment != nil:
 		gitCommit, dockerImage, err := h.resolveRedeploy(ctx, principal.WorkspaceID, environment.AppID, environment.ID, req.Deployment.DeploymentId)
 		if err != nil {
-			return err
+			return "", err
 		}
 		ctrlReq.GitCommit = gitCommit
 		ctrlReq.DockerImage = dockerImage
 
 	default:
-		return fault.New(
+		return "", fault.New(
 			"exactly one source required",
 			fault.Code(codes.App.Validation.InvalidInput.URN()),
 			fault.Internal("no source set after validation"),
-			fault.Public("Provide exactly one of image, git, or deployment."),
+			fault.Public("Provide exactly one deployment source."),
 		)
 	}
 
@@ -178,7 +223,7 @@ func (h *Handler) Handle(ctx context.Context, s *zen.Session) error {
 	// pipeline before enqueuing, so callers get a synchronous 400 instead of a
 	// build that dies mid-flight. The worker keeps the same asserts as a backstop.
 	if err = h.ensureEnvironmentDeployable(ctx, environment); err != nil {
-		return err
+		return "", err
 	}
 
 	ctrlResp, err := h.CtrlClient.CreateDeployment(ctx, ctrlReq)
@@ -187,24 +232,17 @@ func (h *Handler) Handle(ctx context.Context, s *zen.Session) error {
 		// message in the internal error but return a fixed public reason so callers can't probe upstream state.
 		var connectErr *connect.Error
 		if errors.As(err, &connectErr) && connectErr.Code() == connect.CodeFailedPrecondition {
-			return fault.Wrap(
+			return "", fault.Wrap(
 				err,
 				fault.Code(codes.App.Precondition.PreconditionFailed.URN()),
 				fault.Internal("ctrl reported a precondition failure: "+connectErr.Message()),
 				fault.Public("The deployment could not be started because a precondition was not met. Verify the app's repository connection, branch, commit, and current deployment, then try again."),
 			)
 		}
-		return ctrlclient.HandleError(err, "create deployment")
+		return "", ctrlclient.HandleError(err, "create deployment")
 	}
 
-	return s.JSON(http.StatusCreated, Response{
-		Meta: openapi.Meta{
-			RequestId: s.RequestID(),
-		},
-		Data: openapi.V2DeploymentsCreateDeploymentResponseData{
-			DeploymentId: ctrlResp.GetDeploymentId(),
-		},
-	})
+	return ctrlResp.GetDeploymentId(), nil
 }
 
 func (h *Handler) resolveRedeploy(ctx context.Context, workspaceID, appID, environmentID, deploymentID string) (*ctrlv1.GitCommitInfo, string, error) {
@@ -229,19 +267,41 @@ func (h *Handler) resolveRedeploy(ctx context.Context, workspaceID, appID, envir
 		)
 	}
 
-	_, err = db.Query.FindGithubRepoConnectionByAppId(ctx, h.DB.RO(), appID)
-	switch {
-	case err == nil:
-		if deployment.GitBranch.String == "" && deployment.GitCommitSha.String == "" {
-			if deployment.Image.String == "" {
-				return nil, "", fault.New(
-					"deployment not redeployable",
-					fault.Code(codes.App.Precondition.PreconditionFailed.URN()),
-					fault.Internal("redeploy target has neither git metadata nor image"),
-					fault.Public("This deployment cannot be redeployed because it never produced an image."),
-				)
-			}
-			return nil, deployment.Image.String, nil
+	resolvedImage := func() (*ctrlv1.GitCommitInfo, string, error) {
+		image := deployment.ImageResolved
+		if !image.Valid || image.String == "" {
+			image = deployment.Image
+		}
+		if image.String == "" {
+			return nil, "", fault.New(
+				"deployment not redeployable",
+				fault.Code(codes.App.Precondition.PreconditionFailed.URN()),
+				fault.Internal("redeploy target has no resolved image"),
+				fault.Public("This deployment cannot be redeployed because it never produced an image."),
+			)
+		}
+		return nil, image.String, nil
+	}
+	gitCommit := func(requireSHA bool) (*ctrlv1.GitCommitInfo, string, error) {
+		if requireSHA && deployment.GitCommitSha.String == "" {
+			return nil, "", fault.New(
+				"deployment not redeployable",
+				fault.Code(codes.App.Precondition.PreconditionFailed.URN()),
+				fault.Internal("git redeploy target has no commit SHA"),
+				fault.Public("This deployment cannot be redeployed because its Git commit is unavailable."),
+			)
+		}
+		_, connectionErr := db.Query.FindGithubRepoConnectionByAppId(ctx, h.DB.RO(), appID)
+		if db.IsNotFound(connectionErr) {
+			return nil, "", fault.New(
+				"deployment not redeployable",
+				fault.Code(codes.App.Precondition.PreconditionFailed.URN()),
+				fault.Internal("git redeploy target has no repository connection"),
+				fault.Public("This deployment cannot be redeployed because its repository is not connected."),
+			)
+		}
+		if connectionErr != nil {
+			return nil, "", fault.Wrap(connectionErr, fault.Internal("failed to check repo connection"))
 		}
 		return &ctrlv1.GitCommitInfo{
 			CommitSha:       deployment.GitCommitSha.String,
@@ -252,10 +312,31 @@ func (h *Handler) resolveRedeploy(ctx context.Context, workspaceID, appID, envir
 			Timestamp:       deployment.GitCommitTimestamp.Int64,
 			ForkRepository:  deployment.ForkRepositoryFullName.String,
 		}, "", nil
-	case db.IsNotFound(err):
-		return nil, deployment.Image.String, nil
+	}
+
+	switch deployment.Source {
+	case db.DeploymentsSourceGit:
+		return gitCommit(true)
+	case db.DeploymentsSourceOci:
+		return resolvedImage()
+	case db.DeploymentsSourceUnknown, "":
+		// Historical rows predate explicit provenance. Preserve the old
+		// repository/metadata inference only inside this compatibility arm.
+		_, connectionErr := db.Query.FindGithubRepoConnectionByAppId(ctx, h.DB.RO(), appID)
+		if connectionErr == nil && (deployment.GitBranch.String != "" || deployment.GitCommitSha.String != "") {
+			return gitCommit(false)
+		}
+		if connectionErr != nil && !db.IsNotFound(connectionErr) {
+			return nil, "", fault.Wrap(connectionErr, fault.Internal("failed to check repo connection"))
+		}
+		return resolvedImage()
 	default:
-		return nil, "", fault.Wrap(err, fault.Internal("failed to check repo connection"))
+		return nil, "", fault.New(
+			"deployment not redeployable",
+			fault.Code(codes.App.Precondition.PreconditionFailed.URN()),
+			fault.Internal(fmt.Sprintf("unsupported deployment source %q", deployment.Source)),
+			fault.Public("This deployment has an unsupported source and cannot be redeployed."),
+		)
 	}
 }
 

@@ -469,10 +469,16 @@ type DeploymentSourceGit struct {
 	Repository *string `json:"repository,omitempty"`
 }
 
-// DeploymentSourceImage Deploy a prebuilt Docker image as-is.
+// DeploymentSourceImage Deploy a prebuilt Docker image without a build.
 type DeploymentSourceImage struct {
 	// DockerImage Full image reference to deploy as-is. Qualify the version with a tag (ghcr.io/acme/api:v1.2.3) or with a digest (ghcr.io/acme/api@sha256:...). Without either, the registry serves the latest tag.
 	DockerImage string `json:"dockerImage"`
+}
+
+// DeploymentSourceOCI Deploy a prebuilt OCI image without a build.
+type DeploymentSourceOCI struct {
+	// Image OCI image to deploy. Mutable tags are resolved to immutable digests before rollout.
+	Image string `json:"image"`
 }
 
 // DeploymentStatus Current lifecycle status of the deployment. Poll until it reaches a
@@ -2133,7 +2139,7 @@ type V2DeploymentsCreateDeploymentRequestBody struct {
 	// Git Build from the app's connected GitHub repository.
 	Git *DeploymentSourceGit `json:"git,omitempty"`
 
-	// Image Deploy a prebuilt Docker image as-is.
+	// Image Deploy a prebuilt Docker image without a build.
 	Image *DeploymentSourceImage `json:"image,omitempty"`
 
 	// Project Identifies a resource by either its unique ID or its slug.
@@ -4823,6 +4829,53 @@ type V2RatelimitSetOverrideResponseData struct {
 	OverrideId string `json:"overrideId"`
 }
 
+// V3DeploymentsCreateDeploymentRequestBody Create a deployment. Provide exactly one of git, oci, or deployment.
+type V3DeploymentsCreateDeploymentRequestBody struct {
+	// App Identifies a resource by either its unique ID or its slug.
+	// Accepts a prefixed ID (such as 'proj_' or 'app_') or a slug.
+	App ResourceIdentifier `json:"app"`
+
+	// Deployment Re-run an existing deployment.
+	Deployment *DeploymentSourceDeployment `json:"deployment,omitempty"`
+
+	// Environment Identifies a resource by either its unique ID or its slug.
+	// Accepts a prefixed ID (such as 'proj_' or 'app_') or a slug.
+	Environment ResourceIdentifier `json:"environment"`
+
+	// Git Build from the app's connected GitHub repository.
+	Git *DeploymentSourceGit `json:"git,omitempty"`
+
+	// Oci Deploy a prebuilt OCI image without a build.
+	Oci *DeploymentSourceOCI `json:"oci,omitempty"`
+
+	// Project Identifies a resource by either its unique ID or its slug.
+	// Accepts a prefixed ID (such as 'proj_' or 'app_') or a slug.
+	Project ResourceIdentifier `json:"project"`
+	union   json.RawMessage
+}
+
+// V3DeploymentsCreateDeploymentRequestBody0 defines model for .
+type V3DeploymentsCreateDeploymentRequestBody0 = interface{}
+
+// V3DeploymentsCreateDeploymentRequestBody1 defines model for .
+type V3DeploymentsCreateDeploymentRequestBody1 = interface{}
+
+// V3DeploymentsCreateDeploymentRequestBody2 defines model for .
+type V3DeploymentsCreateDeploymentRequestBody2 = interface{}
+
+// V3DeploymentsCreateDeploymentResponseBody defines model for V3DeploymentsCreateDeploymentResponseBody.
+type V3DeploymentsCreateDeploymentResponseBody struct {
+	Data V3DeploymentsCreateDeploymentResponseData `json:"data"`
+
+	// Meta Metadata object included in every API response. This provides context about the request and is essential for debugging, audit trails, and support inquiries. The `requestId` is particularly important when troubleshooting issues with the Unkey support team.
+	Meta Meta `json:"meta"`
+}
+
+// V3DeploymentsCreateDeploymentResponseData defines model for V3DeploymentsCreateDeploymentResponseData.
+type V3DeploymentsCreateDeploymentResponseData struct {
+	DeploymentId string `json:"deploymentId"`
+}
+
 // ValidationError Individual validation error details. Each validation error provides precise information about what failed, where it failed, and how to fix it, enabling efficient error resolution.
 type ValidationError struct {
 	// Fix A human-readable suggestion describing how to fix the error. This provides practical guidance on what changes would satisfy the validation requirements. Not all validation errors include fix suggestions, but when present, they offer specific remediation advice.
@@ -5122,6 +5175,9 @@ type RatelimitMultiLimitJSONRequestBody = V2RatelimitMultiLimitRequestBody
 
 // RatelimitSetOverrideJSONRequestBody defines body for RatelimitSetOverride for application/json ContentType.
 type RatelimitSetOverrideJSONRequestBody = V2RatelimitSetOverrideRequestBody
+
+// DeploymentsCreateDeploymentV3JSONRequestBody defines body for DeploymentsCreateDeploymentV3 for application/json ContentType.
+type DeploymentsCreateDeploymentV3JSONRequestBody = V3DeploymentsCreateDeploymentRequestBody
 
 // AsV2AppsCreateAppRequestBody0 returns the union data inside the V2AppsCreateAppRequestBody as a V2AppsCreateAppRequestBody0
 func (t V2AppsCreateAppRequestBody) AsV2AppsCreateAppRequestBody0() (V2AppsCreateAppRequestBody0, error) {
@@ -6068,6 +6124,193 @@ func (t *V2PortalGetPortalRequestBody) UnmarshalJSON(b []byte) error {
 		err = json.Unmarshal(raw, &t.Portal)
 		if err != nil {
 			return fmt.Errorf("error reading 'portal': %w", err)
+		}
+	}
+
+	return err
+}
+
+// AsV3DeploymentsCreateDeploymentRequestBody0 returns the union data inside the V3DeploymentsCreateDeploymentRequestBody as a V3DeploymentsCreateDeploymentRequestBody0
+func (t V3DeploymentsCreateDeploymentRequestBody) AsV3DeploymentsCreateDeploymentRequestBody0() (V3DeploymentsCreateDeploymentRequestBody0, error) {
+	var body V3DeploymentsCreateDeploymentRequestBody0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromV3DeploymentsCreateDeploymentRequestBody0 overwrites any union data inside the V3DeploymentsCreateDeploymentRequestBody as the provided V3DeploymentsCreateDeploymentRequestBody0
+func (t *V3DeploymentsCreateDeploymentRequestBody) FromV3DeploymentsCreateDeploymentRequestBody0(v V3DeploymentsCreateDeploymentRequestBody0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeV3DeploymentsCreateDeploymentRequestBody0 performs a merge with any union data inside the V3DeploymentsCreateDeploymentRequestBody, using the provided V3DeploymentsCreateDeploymentRequestBody0
+func (t *V3DeploymentsCreateDeploymentRequestBody) MergeV3DeploymentsCreateDeploymentRequestBody0(v V3DeploymentsCreateDeploymentRequestBody0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsV3DeploymentsCreateDeploymentRequestBody1 returns the union data inside the V3DeploymentsCreateDeploymentRequestBody as a V3DeploymentsCreateDeploymentRequestBody1
+func (t V3DeploymentsCreateDeploymentRequestBody) AsV3DeploymentsCreateDeploymentRequestBody1() (V3DeploymentsCreateDeploymentRequestBody1, error) {
+	var body V3DeploymentsCreateDeploymentRequestBody1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromV3DeploymentsCreateDeploymentRequestBody1 overwrites any union data inside the V3DeploymentsCreateDeploymentRequestBody as the provided V3DeploymentsCreateDeploymentRequestBody1
+func (t *V3DeploymentsCreateDeploymentRequestBody) FromV3DeploymentsCreateDeploymentRequestBody1(v V3DeploymentsCreateDeploymentRequestBody1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeV3DeploymentsCreateDeploymentRequestBody1 performs a merge with any union data inside the V3DeploymentsCreateDeploymentRequestBody, using the provided V3DeploymentsCreateDeploymentRequestBody1
+func (t *V3DeploymentsCreateDeploymentRequestBody) MergeV3DeploymentsCreateDeploymentRequestBody1(v V3DeploymentsCreateDeploymentRequestBody1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsV3DeploymentsCreateDeploymentRequestBody2 returns the union data inside the V3DeploymentsCreateDeploymentRequestBody as a V3DeploymentsCreateDeploymentRequestBody2
+func (t V3DeploymentsCreateDeploymentRequestBody) AsV3DeploymentsCreateDeploymentRequestBody2() (V3DeploymentsCreateDeploymentRequestBody2, error) {
+	var body V3DeploymentsCreateDeploymentRequestBody2
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromV3DeploymentsCreateDeploymentRequestBody2 overwrites any union data inside the V3DeploymentsCreateDeploymentRequestBody as the provided V3DeploymentsCreateDeploymentRequestBody2
+func (t *V3DeploymentsCreateDeploymentRequestBody) FromV3DeploymentsCreateDeploymentRequestBody2(v V3DeploymentsCreateDeploymentRequestBody2) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeV3DeploymentsCreateDeploymentRequestBody2 performs a merge with any union data inside the V3DeploymentsCreateDeploymentRequestBody, using the provided V3DeploymentsCreateDeploymentRequestBody2
+func (t *V3DeploymentsCreateDeploymentRequestBody) MergeV3DeploymentsCreateDeploymentRequestBody2(v V3DeploymentsCreateDeploymentRequestBody2) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t V3DeploymentsCreateDeploymentRequestBody) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	object := make(map[string]json.RawMessage)
+	if t.union != nil {
+		err = json.Unmarshal(b, &object)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	object["app"], err = json.Marshal(t.App)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'app': %w", err)
+	}
+
+	if t.Deployment != nil {
+		object["deployment"], err = json.Marshal(t.Deployment)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'deployment': %w", err)
+		}
+	}
+
+	object["environment"], err = json.Marshal(t.Environment)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'environment': %w", err)
+	}
+
+	if t.Git != nil {
+		object["git"], err = json.Marshal(t.Git)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'git': %w", err)
+		}
+	}
+
+	if t.Oci != nil {
+		object["oci"], err = json.Marshal(t.Oci)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'oci': %w", err)
+		}
+	}
+
+	object["project"], err = json.Marshal(t.Project)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'project': %w", err)
+	}
+
+	b, err = json.Marshal(object)
+	return b, err
+}
+
+func (t *V3DeploymentsCreateDeploymentRequestBody) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	if err != nil {
+		return err
+	}
+	object := make(map[string]json.RawMessage)
+	err = json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["app"]; found {
+		err = json.Unmarshal(raw, &t.App)
+		if err != nil {
+			return fmt.Errorf("error reading 'app': %w", err)
+		}
+	}
+
+	if raw, found := object["deployment"]; found {
+		err = json.Unmarshal(raw, &t.Deployment)
+		if err != nil {
+			return fmt.Errorf("error reading 'deployment': %w", err)
+		}
+	}
+
+	if raw, found := object["environment"]; found {
+		err = json.Unmarshal(raw, &t.Environment)
+		if err != nil {
+			return fmt.Errorf("error reading 'environment': %w", err)
+		}
+	}
+
+	if raw, found := object["git"]; found {
+		err = json.Unmarshal(raw, &t.Git)
+		if err != nil {
+			return fmt.Errorf("error reading 'git': %w", err)
+		}
+	}
+
+	if raw, found := object["oci"]; found {
+		err = json.Unmarshal(raw, &t.Oci)
+		if err != nil {
+			return fmt.Errorf("error reading 'oci': %w", err)
+		}
+	}
+
+	if raw, found := object["project"]; found {
+		err = json.Unmarshal(raw, &t.Project)
+		if err != nil {
+			return fmt.Errorf("error reading 'project': %w", err)
 		}
 	}
 
