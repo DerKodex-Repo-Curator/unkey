@@ -44,7 +44,6 @@ import {
   getFiveMinuteLogsTimeseries,
   getFourHourlyLogsTimeseries,
   getHourlyLogsTimeseries,
-  getLogs,
   getMinutelyLogsTimeseries,
   getMonthlyLogsTimeseries,
   getQuarterlyLogsTimeseries,
@@ -314,7 +313,6 @@ export class ClickHouse {
   public get api() {
     return {
       insert: insertApiRequest(this.inserter),
-      logs: getLogs(this.querier),
       keys: {
         logs: getKeysOverviewLogs(this.querier),
       },

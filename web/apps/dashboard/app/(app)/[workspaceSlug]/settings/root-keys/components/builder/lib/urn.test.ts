@@ -209,6 +209,7 @@ describe("catalogue grammar", () => {
       "github/apps/*",
       "limits",
       "usage",
+      "logs/requests",
     ]);
   });
 });
