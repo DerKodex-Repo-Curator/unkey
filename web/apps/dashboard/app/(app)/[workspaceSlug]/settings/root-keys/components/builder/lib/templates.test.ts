@@ -48,7 +48,7 @@ describe("TEMPLATES", () => {
       "unkey:v1:ws_123:github/apps/*#read",
       "unkey:v1:ws_123:limits#read",
       "unkey:v1:ws_123:usage#read",
-      "unkey:v1:ws_123:logs/requests#read",
+      "unkey:v1:ws_123:logs/apiRequests#read",
     ]);
   });
 
